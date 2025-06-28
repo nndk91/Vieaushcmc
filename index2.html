@@ -12,8 +12,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <!-- html2pdf.js CDN -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- html2canvas for image capture -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -76,7 +76,7 @@
     </style>
 </head>
 <body class="bg-gray-100">
-    <div class="form-container" id="formContentForPdf">
+    <div class="form-container" id="formContentForImage"> <!-- Changed ID for clarity -->
         <div class="text-center mb-8">
             <h2 class="text-xl md:text-2xl font-bold text-gray-800">
                 HỘI HỮU NGHỊ VIỆT NAM – ÚC TP.HỒ CHÍ MINH
@@ -180,8 +180,8 @@
             </div>
             
             <div id="messageBox" class="message-box"></div>
-            <!-- Hidden input to store PDF Base64 data -->
-            <input type="hidden" id="pdfData" name="pdfData">
+            <!-- Hidden input to store image (formerly PDF) Base64 data -->
+            <input type="hidden" id="imageData" name="imageData"> <!-- Changed name to imageData -->
         </form>
     </div>
 
@@ -211,7 +211,6 @@
             const getEventCoords = (e) => {
                 const rect = canvas.getBoundingClientRect();
                 if (e.touches && e.touches.length > 0) {
-                    // For touch events, prevent default scrolling
                     e.preventDefault(); 
                     return {
                         x: e.touches[0].clientX - rect.left,
@@ -232,7 +231,6 @@
 
             const draw = (e) => {
                 if (!isDrawing) return;
-                // e.preventDefault(); // Already handled in getEventCoords for touch
                 const coords = getEventCoords(e);
                 ctx.beginPath();
                 ctx.moveTo(lastX, lastY);
@@ -250,11 +248,10 @@
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
 
-            // Added { passive: false } for touch events to allow preventDefault
             canvas.addEventListener('touchstart', startDrawing, { passive: false });
             canvas.addEventListener('touchmove', draw, { passive: false });
             canvas.addEventListener('touchend', stopDrawing);
-            canvas.addEventListener('touchcancel', stopDrawing); // Handle when touch is interrupted
+            canvas.addEventListener('touchcancel', stopDrawing);
 
 
             document.getElementById('clearSignature').addEventListener('click', () => {
@@ -265,8 +262,8 @@
             const form = document.getElementById('membershipRegistrationForm');
             const submitButton = document.getElementById('submitButton');
             const messageBox = document.getElementById('messageBox');
-            const formContentForPdf = document.getElementById('formContentForPdf');
-            const pdfDataInput = document.getElementById('pdfData'); // Hidden input for PDF data
+            const formContentForImage = document.getElementById('formContentForImage'); // Changed ID
+            const imageDataInput = document.getElementById('imageData'); // Updated to imageDataInput
 
             const isCanvasBlank = () => {
                 const blank = document.createElement('canvas');
@@ -275,49 +272,76 @@
                 return canvas.toDataURL() === blank.toDataURL();
             }
 
-            // Function to generate PDF data URI (no longer saves locally)
-            async function generatePdfDataUri() {
-                // Temporarily hide interactive elements from the PDF output
-                const elementsToHideForPdf = [submitButton, clearSignature];
-                elementsToHideForPdf.forEach(el => el.style.display = 'none');
+            // Function to generate image data URI
+            async function generateImageDataUri() { 
+                const elementsToHideForImage = [submitButton, clearSignature];
+                const formInputsAndTextareas = document.querySelectorAll('#membershipRegistrationForm input:not([type="hidden"]), #membershipRegistrationForm textarea');
 
-                let pdfDataUri = '';
+                const originalDisplays = new Map();
+                const originalReadonlyStates = new Map();
+                const originalDisabledStates = new Map();
+
+                elementsToHideForImage.forEach(el => {
+                    originalDisplays.set(el, el.style.display);
+                    el.style.display = 'none';
+                });
+
+                formInputsAndTextareas.forEach(input => {
+                    originalReadonlyStates.set(input, input.readOnly);
+                    originalDisabledStates.set(input, input.disabled);
+                    input.readOnly = true;
+                    input.disabled = true;
+                });
+
+                let imageDataUri = '';
                 try {
-                    // Update input/textarea values within the HTML to be captured correctly by html2pdf
-                    document.querySelectorAll('#membershipRegistrationForm input, #membershipRegistrationForm textarea').forEach(input => {
+                    formInputsAndTextareas.forEach(input => {
+                        if (input.tagName === 'INPUT') {
+                            if (input.type === 'radio') {
+                                if (input.checked) {
+                                    input.setAttribute('checked', 'checked');
+                                } else {
+                                    input.removeAttribute('checked');
+                                }
+                            } else {
+                                input.setAttribute('value', input.value);
+                            }
+                        } else if (input.tagName === 'TEXTAREA') {
+                            input.innerHTML = input.value;
+                        }
+                    });
+
+                    // Use html2canvas to capture the form content as an image
+                    const canvasImage = await html2canvas(formContentForImage, {
+                        scale: 2, 
+                        logging: false, 
+                        useCORS: false // Set useCORS to true if you have images from other domains
+                    });
+                    imageDataUri = canvasImage.toDataURL('image/png'); // Output as PNG data URI
+
+                } catch (error) {
+                    console.error('Lỗi khi tạo hình ảnh:', error);
+                    messageBox.className = 'message-box error';
+                    messageBox.textContent = `Lỗi khi tạo hình ảnh: ${error.message || error.toString()}. Vui lòng thử lại.`;
+                    messageBox.style.display = 'block';
+                    throw error; 
+                } finally {
+                    elementsToHideForImage.forEach(el => {
+                        el.style.display = originalDisplays.get(el);
+                    });
+                    formInputsAndTextareas.forEach(input => {
+                        input.readOnly = originalReadonlyStates.get(input);
+                        input.disabled = originalDisabledStates.get(input);
                         if (input.type === 'radio' && input.name === 'gender') {
-                            if (input.checked) {
+                            if (input.checked) { 
                                 input.setAttribute('checked', 'checked');
                             } else {
                                 input.removeAttribute('checked');
                             }
-                        } else {
-                            input.setAttribute('value', input.value);
                         }
                     });
-                    document.querySelectorAll('#membershipRegistrationForm textarea').forEach(textarea => {
-                        textarea.innerHTML = textarea.value;
-                    });
-
-                    // Generate PDF as data URI
-                    pdfDataUri = await html2pdf().set({
-                        margin: 0.5,
-                        filename: 'Phieu_Dang_Ky_Hoi_Vien_' + Date.now() + '.pdf',
-                        image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, logging: false, dpi: 192, letterRendering: true }, // Set logging to false
-                        jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-                    }).from(formContentForPdf).output('datauristring'); // Output as data URI string
-
-                } catch (error) {
-                    console.error('Lỗi khi tạo PDF data URI:', error);
-                    messageBox.className = 'message-box error';
-                    messageBox.textContent = `Lỗi khi tạo PDF: ${error.message || error.toString()}.`;
-                    messageBox.style.display = 'block';
-                } finally {
-                    // Always restore visibility of elements
-                    elementsToHideForPdf.forEach(el => el.style.display = 'block');
                 }
-                return pdfDataUri;
+                return imageDataUri;
             }
 
 
@@ -351,16 +375,16 @@
                     return;
                 }
 
-                // Generate PDF data URI and set it to the hidden input
+                // Generate image data URI and set it to the hidden input
                 messageBox.className = 'message-box success';
-                messageBox.textContent = 'Đang tạo PDF để gửi...';
+                messageBox.textContent = 'Đang tạo hình ảnh để gửi...';
                 messageBox.style.display = 'block';
-                const pdfDataUri = await generatePdfDataUri();
-                if (pdfDataUri) {
-                    pdfDataInput.value = pdfDataUri;
+                const imageDataUri = await generateImageDataUri();
+                if (imageDataUri) {
+                    imageDataInput.value = imageDataUri;
                 } else {
                     messageBox.className = 'message-box error';
-                    messageBox.textContent = 'Không thể tạo PDF. Vui lòng thử lại.';
+                    messageBox.textContent = 'Không thể tạo hình ảnh. Vui lòng thử lại.';
                     messageBox.style.display = 'block';
                     submitButton.disabled = false;
                     submitButton.textContent = 'Hoàn Tất Đăng Ký';
@@ -386,13 +410,13 @@
                     });
 
                     messageBox.className = 'message-box success';
-                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu và PDF đang được xử lý.'; 
+                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu và hình ảnh đang được xử lý.'; 
                     messageBox.style.display = 'block';
                     
                     form.reset(); 
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     document.getElementById('signatureData').value = '';
-                    pdfDataInput.value = ''; // Clear PDF hidden input as well
+                    imageDataInput.value = ''; // Clear image hidden input as well
 
                     setTimeout(() => {
                         messageBox.style.display = 'none';
