@@ -44,7 +44,7 @@
         label {
             font-size: 0.9rem;
         }
-        .submit-button:disabled, .pdf-button:disabled {
+        .submit-button:disabled {
             background-color: #93c5fd;
             cursor: not-allowed;
         }
@@ -72,27 +72,6 @@
             background-color: #f9fafb;
             cursor: crosshair;
             touch-action: none;
-        }
-        .pdf-button {
-            background-color: #10B981; /* Green color for PDF */
-            color: #ffffff;
-            padding: 0.85rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.3s ease-in-out, transform 0.1s ease-in-out;
-            width: 100%;
-            border: none;
-            font-size: 1.05rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        .pdf-button:hover {
-            background-color: #059669;
-            transform: translateY(-1px);
-        }
-        .pdf-button:active {
-            transform: translateY(0);
-            box-shadow: none;
         }
     </style>
 </head>
@@ -194,16 +173,15 @@
                 </div>
             </div>
 
-            <div class="mt-8 flex flex-col gap-3">
+            <div class="mt-8">
                 <button type="submit" id="submitButton" class="submit-button w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300">
                     Hoàn Tất Đăng Ký
-                </button>
-                <button type="button" id="savePdfButton" class="pdf-button w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition duration-300">
-                    Lưu PDF
                 </button>
             </div>
             
             <div id="messageBox" class="message-box"></div>
+            <!-- Hidden input to store PDF Base64 data -->
+            <input type="hidden" id="pdfData" name="pdfData">
         </form>
     </div>
 
@@ -286,10 +264,9 @@
             
             const form = document.getElementById('membershipRegistrationForm');
             const submitButton = document.getElementById('submitButton');
-            const savePdfButton = document.getElementById('savePdfButton');
             const messageBox = document.getElementById('messageBox');
-            const australianExperienceTextarea = document.getElementById('australianExperience');
             const formContentForPdf = document.getElementById('formContentForPdf');
+            const pdfDataInput = document.getElementById('pdfData'); // Hidden input for PDF data
 
             const isCanvasBlank = () => {
                 const blank = document.createElement('canvas');
@@ -298,20 +275,17 @@
                 return canvas.toDataURL() === blank.toDataURL();
             }
 
-            // Function to handle PDF generation and download
-            async function generateAndSavePdf() {
-                savePdfButton.disabled = true;
-                savePdfButton.textContent = 'Đang tạo PDF...';
-
+            // Function to generate PDF data URI (no longer saves locally)
+            async function generatePdfDataUri() {
                 // Temporarily hide interactive elements from the PDF output
-                const elementsToHideForPdf = [submitButton, savePdfButton, clearSignature]; 
+                const elementsToHideForPdf = [submitButton, clearSignature];
                 elementsToHideForPdf.forEach(el => el.style.display = 'none');
 
+                let pdfDataUri = '';
                 try {
                     // Update input/textarea values within the HTML to be captured correctly by html2pdf
                     document.querySelectorAll('#membershipRegistrationForm input, #membershipRegistrationForm textarea').forEach(input => {
                         if (input.type === 'radio' && input.name === 'gender') {
-                            // For radio buttons, only update if checked
                             if (input.checked) {
                                 input.setAttribute('checked', 'checked');
                             } else {
@@ -321,42 +295,30 @@
                             input.setAttribute('value', input.value);
                         }
                     });
-                     // For textarea, set innerHTML
                     document.querySelectorAll('#membershipRegistrationForm textarea').forEach(textarea => {
                         textarea.innerHTML = textarea.value;
                     });
 
-
-                    await html2pdf().set({
+                    // Generate PDF as data URI
+                    pdfDataUri = await html2pdf().set({
                         margin: 0.5,
                         filename: 'Phieu_Dang_Ky_Hoi_Vien_' + Date.now() + '.pdf',
                         image: { type: 'jpeg', quality: 0.98 },
-                        html2canvas: { scale: 2, logging: true, dpi: 192, letterRendering: true },
+                        html2canvas: { scale: 2, logging: false, dpi: 192, letterRendering: true }, // Set logging to false
                         jsPDF: { unit: 'in', format: 'letter', orientation: 'portrait' }
-                    }).from(formContentForPdf).save();
+                    }).from(formContentForPdf).output('datauristring'); // Output as data URI string
+
                 } catch (error) {
-                    console.error('Lỗi khi tạo PDF:', error);
+                    console.error('Lỗi khi tạo PDF data URI:', error);
                     messageBox.className = 'message-box error';
                     messageBox.textContent = `Lỗi khi tạo PDF: ${error.message || error.toString()}.`;
                     messageBox.style.display = 'block';
-
-                    // Đảm bảo các nút được hiện lại dù có lỗi
-                    submitButton.style.display = 'block';
-                    savePdfButton.style.display = 'block';
-                    clearSignature.style.display = 'block';
-                    
-                    savePdfButton.disabled = false;
-                    savePdfButton.textContent = 'Lưu PDF';
                 } finally {
                     // Always restore visibility of elements
                     elementsToHideForPdf.forEach(el => el.style.display = 'block');
-                    savePdfButton.disabled = false;
-                    savePdfButton.textContent = 'Lưu PDF';
                 }
+                return pdfDataUri;
             }
-
-            // Manual PDF save button listener
-            savePdfButton.addEventListener('click', generateAndSavePdf);
 
 
             form.addEventListener('submit', async (e) => {
@@ -389,6 +351,23 @@
                     return;
                 }
 
+                // Generate PDF data URI and set it to the hidden input
+                messageBox.className = 'message-box success';
+                messageBox.textContent = 'Đang tạo PDF để gửi...';
+                messageBox.style.display = 'block';
+                const pdfDataUri = await generatePdfDataUri();
+                if (pdfDataUri) {
+                    pdfDataInput.value = pdfDataUri;
+                } else {
+                    messageBox.className = 'message-box error';
+                    messageBox.textContent = 'Không thể tạo PDF. Vui lòng thử lại.';
+                    messageBox.style.display = 'block';
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Hoàn Tất Đăng Ký';
+                    return;
+                }
+
+
                 const formData = new FormData(form);
                 const data = {};
                 for (let [key, value] of formData.entries()) {
@@ -407,15 +386,13 @@
                     });
 
                     messageBox.className = 'message-box success';
-                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu đang được xử lý và PDF đang được tạo...'; 
+                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu và PDF đang được xử lý.'; 
                     messageBox.style.display = 'block';
                     
-                    // Tự động tạo và lưu PDF sau khi gửi form thành công
-                    await generateAndSavePdf();
-
                     form.reset(); 
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     document.getElementById('signatureData').value = '';
+                    pdfDataInput.value = ''; // Clear PDF hidden input as well
 
                     setTimeout(() => {
                         messageBox.style.display = 'none';
