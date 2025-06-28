@@ -233,6 +233,8 @@
             const getEventCoords = (e) => {
                 const rect = canvas.getBoundingClientRect();
                 if (e.touches && e.touches.length > 0) {
+                    // For touch events, prevent default scrolling
+                    e.preventDefault(); 
                     return {
                         x: e.touches[0].clientX - rect.left,
                         y: e.touches[0].clientY - rect.top
@@ -252,7 +254,7 @@
 
             const draw = (e) => {
                 if (!isDrawing) return;
-                e.preventDefault();
+                // e.preventDefault(); // Already handled in getEventCoords for touch
                 const coords = getEventCoords(e);
                 ctx.beginPath();
                 ctx.moveTo(lastX, lastY);
@@ -270,9 +272,12 @@
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
 
-            canvas.addEventListener('touchstart', startDrawing);
-            canvas.addEventListener('touchmove', draw);
+            // Added { passive: false } for touch events to allow preventDefault
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
             canvas.addEventListener('touchend', stopDrawing);
+            canvas.addEventListener('touchcancel', stopDrawing); // Handle when touch is interrupted
+
 
             document.getElementById('clearSignature').addEventListener('click', () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -299,7 +304,7 @@
                 savePdfButton.textContent = 'Đang tạo PDF...';
 
                 // Temporarily hide interactive elements from the PDF output
-                const elementsToHideForPdf = [submitButton, savePdfButton, clearSignature];
+                const elementsToHideForPdf = [submitButton, savePdfButton, clearSignature]; 
                 elementsToHideForPdf.forEach(el => el.style.display = 'none');
 
                 try {
@@ -342,7 +347,12 @@
                     
                     savePdfButton.disabled = false;
                     savePdfButton.textContent = 'Lưu PDF';
-                });
+                } finally {
+                    // Always restore visibility of elements
+                    elementsToHideForPdf.forEach(el => el.style.display = 'block');
+                    savePdfButton.disabled = false;
+                    savePdfButton.textContent = 'Lưu PDF';
+                }
             }
 
             // Manual PDF save button listener
