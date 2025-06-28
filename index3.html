@@ -44,7 +44,7 @@
         label {
             font-size: 0.9rem;
         }
-        .submit-button:disabled, .pdf-button:disabled {
+        .submit-button:disabled {
             background-color: #93c5fd;
             cursor: not-allowed;
         }
@@ -72,27 +72,6 @@
             background-color: #f9fafb;
             cursor: crosshair;
             touch-action: none;
-        }
-        .pdf-button {
-            background-color: #10B981; /* Green color for PDF */
-            color: #ffffff;
-            padding: 0.85rem 1.5rem;
-            border-radius: 0.5rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background-color 0.3s ease-in-out, transform 0.1s ease-in-out;
-            width: 100%;
-            border: none;
-            font-size: 1.05rem;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-        }
-        .pdf-button:hover {
-            background-color: #059669;
-            transform: translateY(-1px);
-        }
-        .pdf-button:active {
-            transform: translateY(0);
-            box-shadow: none;
         }
     </style>
 </head>
@@ -198,9 +177,7 @@
                 <button type="submit" id="submitButton" class="submit-button w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 transition duration-300">
                     Hoàn Tất Đăng Ký
                 </button>
-                <button type="button" id="savePdfButton" class="pdf-button w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-green-700 transition duration-300">
-                    Lưu PDF
-                </button>
+                <!-- Nút Lưu PDF đã bị xóa khỏi đây -->
             </div>
             
             <div id="messageBox" class="message-box"></div>
@@ -233,6 +210,8 @@
             const getEventCoords = (e) => {
                 const rect = canvas.getBoundingClientRect();
                 if (e.touches && e.touches.length > 0) {
+                    // For touch events, prevent default scrolling
+                    e.preventDefault(); 
                     return {
                         x: e.touches[0].clientX - rect.left,
                         y: e.touches[0].clientY - rect.top
@@ -252,7 +231,7 @@
 
             const draw = (e) => {
                 if (!isDrawing) return;
-                e.preventDefault();
+                // e.preventDefault(); // Already handled in getEventCoords for touch
                 const coords = getEventCoords(e);
                 ctx.beginPath();
                 ctx.moveTo(lastX, lastY);
@@ -270,9 +249,12 @@
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
 
-            canvas.addEventListener('touchstart', startDrawing);
-            canvas.addEventListener('touchmove', draw);
+            // Added { passive: false } for touch events to allow preventDefault
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
             canvas.addEventListener('touchend', stopDrawing);
+            canvas.addEventListener('touchcancel', stopDrawing); // Handle when touch is interrupted
+
 
             document.getElementById('clearSignature').addEventListener('click', () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -281,7 +263,7 @@
             
             const form = document.getElementById('membershipRegistrationForm');
             const submitButton = document.getElementById('submitButton');
-            const savePdfButton = document.getElementById('savePdfButton');
+            // const savePdfButton = document.getElementById('savePdfButton'); // Removed
             const messageBox = document.getElementById('messageBox');
             const australianExperienceTextarea = document.getElementById('australianExperience');
             const formContentForPdf = document.getElementById('formContentForPdf');
@@ -293,13 +275,13 @@
                 return canvas.toDataURL() === blank.toDataURL();
             }
 
-            // Function to handle PDF generation and download
+            // Function to handle PDF generation and download (now only called on submit)
             async function generateAndSavePdf() {
-                savePdfButton.disabled = true;
-                savePdfButton.textContent = 'Đang tạo PDF...';
+                // savePdfButton.disabled = true; // Removed
+                // savePdfButton.textContent = 'Đang tạo PDF...'; // Removed
 
                 // Temporarily hide interactive elements from the PDF output
-                const elementsToHideForPdf = [submitButton, savePdfButton, clearSignature];
+                const elementsToHideForPdf = [submitButton, clearSignature]; // savePdfButton removed
                 elementsToHideForPdf.forEach(el => el.style.display = 'none');
 
                 try {
@@ -337,16 +319,21 @@
 
                     // Đảm bảo các nút được hiện lại dù có lỗi
                     submitButton.style.display = 'block';
-                    savePdfButton.style.display = 'block';
+                    // savePdfButton.style.display = 'block'; // Removed
                     clearSignature.style.display = 'block';
                     
-                    savePdfButton.disabled = false;
-                    savePdfButton.textContent = 'Lưu PDF';
-                });
+                    // savePdfButton.disabled = false; // Removed
+                    // savePdfButton.textContent = 'Lưu PDF'; // Removed
+                } finally {
+                    // Always restore visibility of elements
+                    elementsToHideForPdf.forEach(el => el.style.display = 'block');
+                    // savePdfButton.disabled = false; // Removed
+                    // savePdfButton.textContent = 'Lưu PDF'; // Removed
+                }
             }
 
-            // Manual PDF save button listener
-            savePdfButton.addEventListener('click', generateAndSavePdf);
+            // Manual PDF save button listener (Removed)
+            // savePdfButton.addEventListener('click', generateAndSavePdf);
 
 
             form.addEventListener('submit', async (e) => {
