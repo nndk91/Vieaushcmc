@@ -284,7 +284,6 @@
             const savePdfButton = document.getElementById('savePdfButton');
             const messageBox = document.getElementById('messageBox');
             const australianExperienceTextarea = document.getElementById('australianExperience');
-            // const suggestExperienceButton = document.getElementById('suggestExperience'); // Removed
             const formContentForPdf = document.getElementById('formContentForPdf');
 
             const isCanvasBlank = () => {
@@ -294,16 +293,13 @@
                 return canvas.toDataURL() === blank.toDataURL();
             }
 
-            // LLM Integration for Experience Suggestion (Removed)
-            // suggestExperienceButton.addEventListener('click', async () => { ... }); // Removed
-
             // Function to handle PDF generation and download
             async function generateAndSavePdf() {
                 savePdfButton.disabled = true;
                 savePdfButton.textContent = 'Đang tạo PDF...';
 
                 // Temporarily hide interactive elements from the PDF output
-                const elementsToHideForPdf = [submitButton, savePdfButton, clearSignature]; // suggestExperienceButton removed
+                const elementsToHideForPdf = [submitButton, savePdfButton, clearSignature];
                 elementsToHideForPdf.forEach(el => el.style.display = 'none');
 
                 try {
@@ -342,7 +338,6 @@
                     // Đảm bảo các nút được hiện lại dù có lỗi
                     submitButton.style.display = 'block';
                     savePdfButton.style.display = 'block';
-                    // suggestExperienceButton.style.display = 'block'; // Removed
                     clearSignature.style.display = 'block';
                     
                     savePdfButton.disabled = false;
@@ -402,7 +397,7 @@
                     });
 
                     messageBox.className = 'message-box success';
-                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu đang được xử lý và PDF đang được tạo...'; // Cập nhật thông báo
+                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu đang được xử lý và PDF đang được tạo...'; 
                     messageBox.style.display = 'block';
                     
                     // Tự động tạo và lưu PDF sau khi gửi form thành công
