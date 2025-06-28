@@ -12,6 +12,8 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- html2canvas for image capture -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -74,7 +76,7 @@
     </style>
 </head>
 <body class="bg-gray-100">
-    <div class="form-container">
+    <div class="form-container" id="formContentForImage"> <!-- Changed ID for clarity -->
         <div class="text-center mb-8">
             <h2 class="text-xl md:text-2xl font-bold text-gray-800">
                 HỘI HỮU NGHỊ VIỆT NAM – ÚC TP.HỒ CHÍ MINH
@@ -178,6 +180,8 @@
             </div>
             
             <div id="messageBox" class="message-box"></div>
+            <!-- Hidden input to store image (formerly PDF) Base64 data -->
+            <input type="hidden" id="imageData" name="imageData"> <!-- Changed name to imageData -->
         </form>
     </div>
 
@@ -207,6 +211,7 @@
             const getEventCoords = (e) => {
                 const rect = canvas.getBoundingClientRect();
                 if (e.touches && e.touches.length > 0) {
+                    e.preventDefault(); 
                     return {
                         x: e.touches[0].clientX - rect.left,
                         y: e.touches[0].clientY - rect.top
@@ -226,7 +231,6 @@
 
             const draw = (e) => {
                 if (!isDrawing) return;
-                e.preventDefault();
                 const coords = getEventCoords(e);
                 ctx.beginPath();
                 ctx.moveTo(lastX, lastY);
@@ -244,9 +248,11 @@
             canvas.addEventListener('mouseup', stopDrawing);
             canvas.addEventListener('mouseout', stopDrawing);
 
-            canvas.addEventListener('touchstart', startDrawing);
-            canvas.addEventListener('touchmove', draw);
+            canvas.addEventListener('touchstart', startDrawing, { passive: false });
+            canvas.addEventListener('touchmove', draw, { passive: false });
             canvas.addEventListener('touchend', stopDrawing);
+            canvas.addEventListener('touchcancel', stopDrawing);
+
 
             document.getElementById('clearSignature').addEventListener('click', () => {
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -256,6 +262,8 @@
             const form = document.getElementById('membershipRegistrationForm');
             const submitButton = document.getElementById('submitButton');
             const messageBox = document.getElementById('messageBox');
+            const formContentForImage = document.getElementById('formContentForImage'); // Changed ID
+            const imageDataInput = document.getElementById('imageData'); // Updated to imageDataInput
 
             const isCanvasBlank = () => {
                 const blank = document.createElement('canvas');
@@ -263,6 +271,79 @@
                 blank.height = canvas.height;
                 return canvas.toDataURL() === blank.toDataURL();
             }
+
+            // Function to generate image data URI
+            async function generateImageDataUri() { 
+                const elementsToHideForImage = [submitButton, clearSignature];
+                const formInputsAndTextareas = document.querySelectorAll('#membershipRegistrationForm input:not([type="hidden"]), #membershipRegistrationForm textarea');
+
+                const originalDisplays = new Map();
+                const originalReadonlyStates = new Map();
+                const originalDisabledStates = new Map();
+
+                elementsToHideForImage.forEach(el => {
+                    originalDisplays.set(el, el.style.display);
+                    el.style.display = 'none';
+                });
+
+                formInputsAndTextareas.forEach(input => {
+                    originalReadonlyStates.set(input, input.readOnly);
+                    originalDisabledStates.set(input, input.disabled);
+                    input.readOnly = true;
+                    input.disabled = true;
+                });
+
+                let imageDataUri = '';
+                try {
+                    formInputsAndTextareas.forEach(input => {
+                        if (input.tagName === 'INPUT') {
+                            if (input.type === 'radio') {
+                                if (input.checked) {
+                                    input.setAttribute('checked', 'checked');
+                                } else {
+                                    input.removeAttribute('checked');
+                                }
+                            } else {
+                                input.setAttribute('value', input.value);
+                            }
+                        } else if (input.tagName === 'TEXTAREA') {
+                            input.innerHTML = input.value;
+                        }
+                    });
+
+                    // Use html2canvas to capture the form content as an image
+                    const canvasImage = await html2canvas(formContentForImage, {
+                        scale: 2, 
+                        logging: false, 
+                        useCORS: false // Set useCORS to true if you have images from other domains
+                    });
+                    imageDataUri = canvasImage.toDataURL('image/png'); // Output as PNG data URI
+
+                } catch (error) {
+                    console.error('Lỗi khi tạo hình ảnh:', error);
+                    messageBox.className = 'message-box error';
+                    messageBox.textContent = `Lỗi khi tạo hình ảnh: ${error.message || error.toString()}. Vui lòng thử lại.`;
+                    messageBox.style.display = 'block';
+                    throw error; 
+                } finally {
+                    elementsToHideForImage.forEach(el => {
+                        el.style.display = originalDisplays.get(el);
+                    });
+                    formInputsAndTextareas.forEach(input => {
+                        input.readOnly = originalReadonlyStates.get(input);
+                        input.disabled = originalDisabledStates.get(input);
+                        if (input.type === 'radio' && input.name === 'gender') {
+                            if (input.checked) { 
+                                input.setAttribute('checked', 'checked');
+                            } else {
+                                input.removeAttribute('checked');
+                            }
+                        }
+                    });
+                }
+                return imageDataUri;
+            }
+
 
             form.addEventListener('submit', async (e) => {
                 e.preventDefault();
@@ -294,6 +375,23 @@
                     return;
                 }
 
+                // Generate image data URI and set it to the hidden input
+                messageBox.className = 'message-box success';
+                messageBox.textContent = 'Đang tạo hình ảnh để gửi...';
+                messageBox.style.display = 'block';
+                const imageDataUri = await generateImageDataUri();
+                if (imageDataUri) {
+                    imageDataInput.value = imageDataUri;
+                } else {
+                    messageBox.className = 'message-box error';
+                    messageBox.textContent = 'Không thể tạo hình ảnh. Vui lòng thử lại.';
+                    messageBox.style.display = 'block';
+                    submitButton.disabled = false;
+                    submitButton.textContent = 'Hoàn Tất Đăng Ký';
+                    return;
+                }
+
+
                 const formData = new FormData(form);
                 const data = {};
                 for (let [key, value] of formData.entries()) {
@@ -312,12 +410,13 @@
                     });
 
                     messageBox.className = 'message-box success';
-                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu đang được xử lý.'; 
+                    messageBox.textContent = 'Đăng ký thành công! Dữ liệu và hình ảnh đang được xử lý.'; 
                     messageBox.style.display = 'block';
                     
                     form.reset(); 
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
                     document.getElementById('signatureData').value = '';
+                    imageDataInput.value = ''; // Clear image hidden input as well
 
                     setTimeout(() => {
                         messageBox.style.display = 'none';
